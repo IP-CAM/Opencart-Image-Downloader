@@ -10,6 +10,7 @@ import (
     "os"
     "path/filepath"
     "strings"
+    "sync"
 
     "fyne.io/fyne/v2"
     "fyne.io/fyne/v2/app"
@@ -24,6 +25,9 @@ func main() {
 
     urlEntry := widget.NewEntry()
     urlEntry.SetPlaceHolder("Enter Google Spreadsheet URL")
+
+    progressBar := widget.NewProgressBar()
+    statusLabel := widget.NewLabel("Status: Idle")
     downloadButton := widget.NewButton("Download Images", func() {
         go func() {
             spreadsheetURL := urlEntry.Text
@@ -32,24 +36,30 @@ func main() {
                 return
             }
 
+            statusLabel.SetText("Status: Fetching CSV data...")
             csvURL, err := getCSVURL(spreadsheetURL)
             if err != nil {
                 showError(myWindow, err)
+                statusLabel.SetText("Status: Idle")
                 return
             }
 
             records, err := fetchCSV(csvURL)
             if err != nil {
                 showError(myWindow, err)
+                statusLabel.SetText("Status: Idle")
                 return
             }
 
-            err = processRecords(records)
+            statusLabel.SetText("Status: Processing records...")
+            err = processRecords(records, progressBar, statusLabel)
             if err != nil {
                 showError(myWindow, err)
+                statusLabel.SetText("Status: Idle")
                 return
             }
 
+            statusLabel.SetText("Status: Completed")
             showInfo(myWindow, "Images downloaded successfully")
         }()
     })
@@ -57,10 +67,12 @@ func main() {
     content := container.NewVBox(
         urlEntry,
         downloadButton,
+        progressBar,
+        statusLabel,
     )
 
     myWindow.SetContent(content)
-    myWindow.Resize(fyne.NewSize(600, 100))
+    myWindow.Resize(fyne.NewSize(800, 600))
     myWindow.ShowAndRun()
 }
 
@@ -121,7 +133,7 @@ func fetchCSV(csvURL string) ([][]string, error) {
     return records, nil
 }
 
-func processRecords(records [][]string) error {
+func processRecords(records [][]string, progressBar *widget.ProgressBar, statusLabel *widget.Label) error {
     if len(records) < 2 {
         return errors.New("No data in CSV")
     }
@@ -139,20 +151,35 @@ func processRecords(records [][]string) error {
         }
     }
 
+    totalRows := len(records) - 1
+    progressBar.Max = float64(totalRows)
+    progressBar.SetValue(0)
+
+    var mu sync.Mutex // To synchronize access to UI elements
     for rowIndex, row := range records[1:] {
+        fyne.CurrentApp().SendNotification(&fyne.Notification{
+            Title:   "Processing",
+            Content: fmt.Sprintf("Processing row %d/%d", rowIndex+1, totalRows),
+        })
+
         mainImageURL := row[headerMap["main_image"]]
         imageCacheURLs := row[headerMap["image_cache"]]
         brandSEOURL := row[headerMap["brand_seo_url"]]
         seoURL := row[headerMap["seo_url"]]
 
+        var newMainImagePath string
         if mainImageURL != "" {
-            err := downloadAndSaveImage(mainImageURL, brandSEOURL, seoURL, fmt.Sprintf("main_image_%d", rowIndex))
+            statusLabel.SetText(fmt.Sprintf("Status: Downloading main_image (%d/%d)", rowIndex+1, totalRows))
+            newPath, err := downloadAndSaveImage(mainImageURL, brandSEOURL, seoURL, fmt.Sprintf("main_image_%d", rowIndex))
             if err != nil {
                 fmt.Printf("Error downloading main_image for row %d: %v\n", rowIndex+2, err)
             }
+            newMainImagePath = newPath
         }
 
+        var newImageCachePaths []string
         if imageCacheURLs != "" {
+            statusLabel.SetText(fmt.Sprintf("Status: Downloading image_cache (%d/%d)", rowIndex+1, totalRows))
             var urls []string
             if strings.Contains(imageCacheURLs, "|") {
                 urls = strings.Split(imageCacheURLs, "|")
@@ -165,68 +192,84 @@ func processRecords(records [][]string) error {
             for i, imgURL := range urls {
                 imgURL = strings.TrimSpace(imgURL)
                 if imgURL != "" {
-                    err := downloadAndSaveImage(imgURL, brandSEOURL, seoURL, fmt.Sprintf("image_cache_%d_%d", rowIndex, i))
+                    newPath, err := downloadAndSaveImage(imgURL, brandSEOURL, seoURL, fmt.Sprintf("image_cache_%d_%d", rowIndex, i))
                     if err != nil {
                         fmt.Printf("Error downloading image_cache for row %d: %v\n", rowIndex+2, err)
                     }
+                    newImageCachePaths = append(newImageCachePaths, newPath)
                 }
             }
         }
+        mu.Lock()
+
+        // Update progress bar and status label
+        progressBar.SetValue(float64(rowIndex + 1))
+        mu.Unlock()
     }
 
     return nil
 }
 
-func downloadAndSaveImage(imageURL, brandSEOURL, seoURL, imageType string) error {
+func downloadAndSaveImage(imageURL, brandSEOURL, seoURL, imageType string) (string, error) {
     baseDir := "products"
     brandDir := filepath.Join(baseDir, brandSEOURL)
     err := os.MkdirAll(brandDir, os.ModePerm)
     if err != nil {
-        return err
+        return "", err
     }
 
     ext := filepath.Ext(imageURL)
-    if ext == "" {
+    if ext == "" || len(ext) > 5 {
         ext = ".jpg"
     }
 
     filename := fmt.Sprintf("%s_%s%s", seoURL, imageType, ext)
     filePath := filepath.Join(brandDir, filename)
+    relativePath := filepath.ToSlash(filePath) // For consistent path separators
 
     if _, err := os.Stat(filePath); err == nil {
-        return nil
+        // File already exists
+        return relativePath, nil
     }
 
     resp, err := http.Get(imageURL)
     if err != nil {
-        return err
+        return "", err
     }
     defer resp.Body.Close()
 
     if resp.StatusCode != http.StatusOK {
-        return fmt.Errorf("Failed to download image: %s", resp.Status)
+        return "", fmt.Errorf("Failed to download image: %s", resp.Status)
     }
 
     out, err := os.Create(filePath)
     if err != nil {
-        return err
+        return "", err
     }
     defer out.Close()
 
     _, err = io.Copy(out, resp.Body)
     if err != nil {
-        return err
+        return "", err
     }
 
     fmt.Printf("Downloaded image: %s\n", filePath)
-    return nil
+    return relativePath, nil
 }
 
 func showError(win fyne.Window, err error) {
+    fyne.CurrentApp().SendNotification(&fyne.Notification{
+        Title:   "Error",
+        Content: err.Error(),
+    })
     dialog.ShowError(err, win)
 }
 
 func showInfo(win fyne.Window, message string) {
+    fyne.CurrentApp().SendNotification(&fyne.Notification{
+        Title:   "Success",
+        Content: message,
+    })
     dialog.ShowInformation("Success", message, win)
 }
 
