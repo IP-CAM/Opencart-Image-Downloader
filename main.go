@@ -58,16 +58,27 @@ func main() {
                 return
             }
 
-            statusLabel.SetText("Status: Processing records...")
-            err = processRecords(records, progressBar, statusLabel, mainImageText, imageCacheText)
-            if err != nil {
-                showError(myWindow, err)
-                statusLabel.SetText("Status: Idle")
-                return
+            statusLabel.SetText("Status: Checking existing images...")
+            if dirExists("products") {
+                dialog.ShowConfirm("Directory Exists",
+                    `"products" directory already exists. Do you want to delete it and proceed?`,
+                    func(b bool) {
+                        if b {
+                            err := os.RemoveAll("products")
+                            if err != nil {
+                                showError(myWindow, fmt.Errorf("Failed to delete 'products' directory: %v", err))
+                                return
+                            }
+                            continueProcessing(records, statusLabel, progressBar, mainImageText, imageCacheText, myWindow)
+                        } else {
+                            statusLabel.SetText("Status: Operation Aborted")
+                            showError(myWindow, fmt.Errorf("'products' directory exists, aborting ..."))
+                            return
+                        }
+                    }, myWindow)
+            } else {
+                continueProcessing(records, statusLabel, progressBar, mainImageText, imageCacheText, myWindow)
             }
-
-            statusLabel.SetText("Status: Completed")
-            showInfo(myWindow, "Images downloaded successfully")
         }()
     })
 
@@ -243,6 +254,19 @@ func processRecords(records [][]string, progressBar *widget.ProgressBar, statusL
     return nil
 }
 
+func continueProcessing(records [][]string, statusLabel *widget.Label, progressBar *widget.ProgressBar, mainImageText, imageCacheText *widget.Entry, myWindow fyne.Window) {
+    statusLabel.SetText("Status: Processing records...")
+    err := processRecords(records, progressBar, statusLabel, mainImageText, imageCacheText)
+    if err != nil {
+        showError(myWindow, err)
+        statusLabel.SetText("Status: Idle")
+        return
+    }
+
+    statusLabel.SetText("Status: Completed")
+    showInfo(myWindow, "Images downloaded successfully")
+}
+
 func downloadAndSaveImage(imageURL, brandSEOURL, seoURL, imageType string) (string, error) {
     baseDir := "products"
     brandDir := filepath.Join(baseDir, brandSEOURL)
@@ -304,5 +328,13 @@ func showInfo(win fyne.Window, message string) {
         Content: message,
     })
     dialog.ShowInformation("Success", message, win)
+}
+
+func dirExists(dir string) bool {
+    info, err := os.Stat(dir)
+    if os.IsNotExist(err) {
+        return false
+    }
+    return info.IsDir()
 }
 
