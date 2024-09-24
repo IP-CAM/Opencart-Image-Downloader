@@ -28,6 +28,13 @@ func main() {
 
     progressBar := widget.NewProgressBar()
     statusLabel := widget.NewLabel("Status: Idle")
+
+    mainImageText := widget.NewMultiLineEntry()
+    mainImageText.SetPlaceHolder("New main_image content will appear here")
+
+    imageCacheText := widget.NewMultiLineEntry()
+    imageCacheText.SetPlaceHolder("New image_cache content will appear here")
+
     downloadButton := widget.NewButton("Download Images", func() {
         go func() {
             spreadsheetURL := urlEntry.Text
@@ -52,7 +59,7 @@ func main() {
             }
 
             statusLabel.SetText("Status: Processing records...")
-            err = processRecords(records, progressBar, statusLabel)
+            err = processRecords(records, progressBar, statusLabel, mainImageText, imageCacheText)
             if err != nil {
                 showError(myWindow, err)
                 statusLabel.SetText("Status: Idle")
@@ -69,6 +76,10 @@ func main() {
         downloadButton,
         progressBar,
         statusLabel,
+        widget.NewLabel("New main_image Data:"),
+        mainImageText,
+        widget.NewLabel("New image_cache Data:"),
+        imageCacheText,
     )
 
     myWindow.SetContent(content)
@@ -133,7 +144,7 @@ func fetchCSV(csvURL string) ([][]string, error) {
     return records, nil
 }
 
-func processRecords(records [][]string, progressBar *widget.ProgressBar, statusLabel *widget.Label) error {
+func processRecords(records [][]string, progressBar *widget.ProgressBar, statusLabel *widget.Label, mainImageText, imageCacheText *widget.Entry) error {
     if len(records) < 2 {
         return errors.New("No data in CSV")
     }
@@ -154,6 +165,9 @@ func processRecords(records [][]string, progressBar *widget.ProgressBar, statusL
     totalRows := len(records) - 1
     progressBar.Max = float64(totalRows)
     progressBar.SetValue(0)
+
+    var mainImageData []string
+    var imageCacheData []string
 
     var mu sync.Mutex // To synchronize access to UI elements
     for rowIndex, row := range records[1:] {
@@ -200,12 +214,31 @@ func processRecords(records [][]string, progressBar *widget.ProgressBar, statusL
                 }
             }
         }
+
+        // Update the main_image and image_cache data
         mu.Lock()
+        if newMainImagePath != "" {
+            mainImageData = append(mainImageData, newMainImagePath)
+        } else {
+            mainImageData = append(mainImageData, "")
+        }
+
+        if len(newImageCachePaths) > 0 {
+            imageCacheData = append(imageCacheData, strings.Join(newImageCachePaths, "|"))
+        } else {
+            imageCacheData = append(imageCacheData, "")
+        }
 
         // Update progress bar and status label
         progressBar.SetValue(float64(rowIndex + 1))
         mu.Unlock()
     }
+
+    // Update the text boxes with new data
+//    fyne.CurrentApp().RunOnMain(func() {
+        mainImageText.SetText(strings.Join(mainImageData, "\n"))
+        imageCacheText.SetText(strings.Join(imageCacheData, "\n"))
+//    })
 
     return nil
 }
