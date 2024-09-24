@@ -195,7 +195,7 @@ func processRecords(records [][]string, progressBar *widget.ProgressBar, statusL
         var newMainImagePath string
         if mainImageURL != "" {
             statusLabel.SetText(fmt.Sprintf("Status: Downloading main_image (%d/%d)", rowIndex+1, totalRows))
-            newPath, err := downloadAndSaveImage(mainImageURL, brandSEOURL, seoURL, fmt.Sprintf("main_image_%d", rowIndex))
+            newPath, err := downloadAndSaveImage(mainImageURL, brandSEOURL, seoURL, fmt.Sprintf("m%d", rowIndex))
             if err != nil {
                 fmt.Printf("Error downloading main_image for row %d: %v\n", rowIndex+2, err)
             }
@@ -217,7 +217,7 @@ func processRecords(records [][]string, progressBar *widget.ProgressBar, statusL
             for i, imgURL := range urls {
                 imgURL = strings.TrimSpace(imgURL)
                 if imgURL != "" {
-                    newPath, err := downloadAndSaveImage(imgURL, brandSEOURL, seoURL, fmt.Sprintf("image_cache_%d_%d", rowIndex, i))
+                    newPath, err := downloadAndSaveImage(imgURL, brandSEOURL, seoURL, fmt.Sprintf("i%d_j%d", rowIndex, i))
                     if err != nil {
                         fmt.Printf("Error downloading image_cache for row %d: %v\n", rowIndex+2, err)
                     }
