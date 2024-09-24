@@ -6,7 +6,9 @@ import (
     "fmt"
     "io"
     "net/http"
+    "net/http/cookiejar"
     "net/url"
+    "time"
     "os"
     "path/filepath"
     "strings"
@@ -17,6 +19,8 @@ import (
     "fyne.io/fyne/v2/container"
     "fyne.io/fyne/v2/dialog"
     "fyne.io/fyne/v2/widget"
+
+    "golang.org/x/net/publicsuffix"
 )
 
 func main() {
@@ -267,6 +271,7 @@ func continueProcessing(records [][]string, statusLabel *widget.Label, progressB
     showInfo(myWindow, "Images downloaded successfully")
 }
 
+// downloadAndSaveImage behaves more like a browser when downloading images
 func downloadAndSaveImage(imageURL, brandSEOURL, seoURL, imageType string) (string, error) {
     baseDir := "products"
     brandDir := filepath.Join(baseDir, brandSEOURL)
@@ -289,7 +294,28 @@ func downloadAndSaveImage(imageURL, brandSEOURL, seoURL, imageType string) (stri
         return relativePath, nil
     }
 
-    resp, err := http.Get(imageURL)
+    // Create a new HTTP client that mimics a browser
+    jar, _ := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
+    client := &http.Client{
+        Jar:     jar,
+        Timeout: 30 * time.Second, // Set a timeout for the download
+        // Follow redirects by default
+    }
+
+    // Create an HTTP request with custom headers
+    req, err := http.NewRequest("GET", imageURL, nil)
+    if err != nil {
+        return "", err
+    }
+
+    // Add browser-like headers to the request
+    req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+    req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+    req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+    req.Header.Set("Referer", "https://www.google.com/") // Simulating a referrer
+
+    // Perform the HTTP request
+    resp, err := client.Do(req)
     if err != nil {
         return "", err
     }
@@ -299,6 +325,7 @@ func downloadAndSaveImage(imageURL, brandSEOURL, seoURL, imageType string) (stri
         return "", fmt.Errorf("Failed to download image: %s", resp.Status)
     }
 
+    // Save the image to a file
     out, err := os.Create(filePath)
     if err != nil {
         return "", err
