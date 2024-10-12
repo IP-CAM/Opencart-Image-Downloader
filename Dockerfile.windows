@@ -1,0 +1,38 @@
+# syntax=docker/dockerfile:1
+
+# Use the official Go image as the base
+FROM golang:1.20 AS builder
+
+# Install mingw-w64 for Windows cross-compilation
+RUN apt-get update && apt-get install -y \
+    gcc-mingw-w64-x86-64 \
+    libgl1-mesa-dev \
+    xorg-dev \
+    libgtk-3-dev \
+    libwebkit2gtk-4.0-dev
+
+# Set the working directory
+WORKDIR /app
+
+# Copy go.mod and go.sum files and download dependencies
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy the rest of the application source code
+COPY . .
+
+# Set environment variables for cross-compilation
+ENV GOOS=windows
+ENV GOARCH=amd64
+ENV CC=x86_64-w64-mingw32-gcc
+ENV CXX=x86_64-w64-mingw32-g++
+ENV CGO_ENABLED=1
+
+# Build the Go application
+RUN go build -o /app/app.exe main.go
+
+# Final stage to extract the binary
+FROM scratch AS export-stage
+ARG APP_NAME
+COPY --from=builder /app/app.exe /${APP_NAME}.exe
+
