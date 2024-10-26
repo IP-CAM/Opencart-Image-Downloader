@@ -1,7 +1,7 @@
 # Makefile for Go Application
 
 # Application name
-APP_NAME := ImageDownloader
+APP_NAME := OCImage2Downloader
 
 # Output directory for binaries
 OUTPUT_DIR := bin
@@ -22,7 +22,7 @@ VERSION=$(shell \
   if git describe --tags --exact-match HEAD >/dev/null 2>&1; then \
     echo "$$latest_tag"; \
   else \
-    echo "$$latest_tag-$$latest_commit\_dev"; \
+    echo "$$latest_tag-$$latest_commit""_dev"; \
   fi)
 
 OS_NAME=$$(uname -s)
@@ -53,6 +53,14 @@ help:
 	@echo "(simple building executables inside docker containers for Lin and Win)"
 	@echo "  build-docker-windows : Build Windows binary using Docker"
 	@echo "  build-docker-linux   : Build Linux binary using Docker"
+	@echo ""
+	@echo "Dependency Installation:"
+	@echo "  lin-dep-ubuntu       : Install local dependencies for Linux build on Ubuntu"
+	@echo "  win-dep-ubuntu       : Install local dependencies for Windows build on Ubuntu"
+	@echo ""
+	@echo "Release Targets:"
+	@echo "  release              : Create a new GitHub release with the built binaries"
+	@echo "                        (Requires 'gh' CLI tool and 'gh auth login' for authentication)"
 	@echo ""
 	@echo "Helpers:"
 	@echo "  prepare     : Download and install dependencies"
@@ -87,6 +95,23 @@ prepare:
 	@go mod download
 	@echo "Dependencies downloaded."
 
+# Install local dependencies for linux build
+lin-dep-ubuntu:
+	@sudo apt-get update && sudo apt-get install \
+        libgl1-mesa-dev \
+	libx11-dev \
+        xorg-dev \
+        libxcursor-dev \
+        libxrandr-dev \
+        libxinerama-dev \
+        libxi-dev \
+        libglu1-mesa-dev \
+        pkg-config
+
+# Install local dependencies for windows build
+win-dep-ubuntu:
+	@sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64 libgl1-mesa-dev xorg-dev libgtk-3-dev 
+
 # Build for the current architecture
 build: prepare
 	@echo "Current OS ($(OS_NAME)) architecture ($(GOARCH))..."
@@ -105,6 +130,7 @@ build: prepare
 # Build for Linux
 build-linux: prepare
 	@echo "Building for Linux..."
+	@echo "GOOS=linux GOARCH=$(GOARCH) go build -ldflags \"-X main.Version=$(VERSION)\" -o $(OUTPUT_DIR)/$(APP_NAME)-$(VERSION)_linux_$(GOARCH) $(MAIN_FILE)"
 	@GOOS=linux GOARCH=$(GOARCH) go build -ldflags "-X main.Version=$(VERSION)" -o $(OUTPUT_DIR)/$(APP_NAME)-$(VERSION)_linux_$(GOARCH) $(MAIN_FILE)
 	@echo "Linux build completed: $(OUTPUT_DIR)/$(APP_NAME)-$(VERSION)_linux_$(GOARCH)"
 
@@ -117,7 +143,7 @@ build-mac: prepare
 # Build for Windows
 build-windows: prepare
 	@echo "Building for Windows..."
-	@GOOS=windows GOARCH=$(GOARCH) go build -ldflags "-X main.Version=$(VERSION)" -o $(OUTPUT_DIR)/$(APP_NAME)-$(VERSION)_windows_$(GOARCH).exe $(MAIN_FILE)
+	@GOOS=windows GOARCH=$(GOARCH) CGO_ENABLED=1 CC="x86_64-w64-mingw32-gcc" CXX="x86_64-w64-mingw32-g++" go build -ldflags "-X main.Version=$(VERSION)" -o $(OUTPUT_DIR)/$(APP_NAME)-$(VERSION)_windows_$(GOARCH).exe $(MAIN_FILE)
 	@echo "Windows build completed: $(OUTPUT_DIR)/$(APP_NAME)-$(VERSION)_windows_$(GOARCH).exe"
 
 build-docker-windows:
@@ -131,8 +157,18 @@ build-docker-linux:
 	@echo "Linux Docker build completed: $(OUTPUT_DIR)/$(APP_NAME)-$(VERSION)_linux_$(GOARCH)"
 
 # Build for all platforms
-build-all: prepare build-linux build-mac build-windows
+build-all: prepare build-linux build-windows #build-mac
 	@echo "All builds completed successfully!"
+
+# Release target that creates a GitHub release and uploads binaries
+release: build-all
+	@echo "Creating GitHub release for version $(VERSION)..."
+	gh release create $(VERSION) \
+		--title "Release $(VERSION)" \
+		--notes "Semi-automated release for version $(VERSION)" \
+		$(OUTPUT_DIR)/$(APP_NAME)-$(VERSION)_linux_$(GOARCH) \
+		$(OUTPUT_DIR)/$(APP_NAME)-$(VERSION)_windows_$(GOARCH).exe
+	@echo "Release $(VERSION) created successfully."
 
 # Clean compiled binaries
 clean:
