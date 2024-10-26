@@ -300,7 +300,7 @@ func downloadAndSaveImage(imageURL, brandSEOURL, seoURL, imageType string) (stri
 	relativePath := filepath.ToSlash(filePath) // For consistent path separators
 
 	if _, err := os.Stat(filePath); err == nil {
-		// File already exists
+		fmt.Printf("File already exists: %s\n", filePath)
 		return relativePath, nil
 	}
 
@@ -327,7 +327,7 @@ func downloadAndSaveImage(imageURL, brandSEOURL, seoURL, imageType string) (stri
 	// Perform the HTTP request
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("Failed to execute HTTP request: %v", err)
 	}
 	defer resp.Body.Close()
 
@@ -338,13 +338,21 @@ func downloadAndSaveImage(imageURL, brandSEOURL, seoURL, imageType string) (stri
 	// Save the image to a file
 	out, err := os.Create(filePath)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("Failed to create file: %v", err)
 	}
 	defer out.Close()
 
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("Failed to save image to file: %v", err)
+	}
+
+	// Check if the content length matches the downloaded file size
+	if resp.ContentLength > 0 {
+		stat, err := out.Stat()
+		if err == nil && stat.Size() != resp.ContentLength {
+			return "", fmt.Errorf("File size mismatch: expected %d bytes, got %d bytes", resp.ContentLength, stat.Size())
+		}
 	}
 
 	fmt.Printf("Downloaded image: %s\n", filePath)
