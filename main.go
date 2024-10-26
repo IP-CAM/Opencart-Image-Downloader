@@ -196,10 +196,10 @@ func processRecords(records [][]string, progressBar *widget.ProgressBar, statusL
 
 	var mu sync.Mutex // To synchronize access to UI elements
 	for rowIndex, row := range records[1:] {
-		fyne.CurrentApp().SendNotification(&fyne.Notification{
-			Title:   "Processing",
-			Content: fmt.Sprintf("Processing row %d/%d", rowIndex+1, totalRows),
-		})
+		// fyne.CurrentApp().SendNotification(&fyne.Notification{
+		// 	Title:   "Processing",
+		// 	Content: fmt.Sprintf("Processing row %d/%d", rowIndex+1, totalRows),
+		// })
 
 		mainImageURL := row[headerMap["main_image"]]
 		imageCacheURLs := row[headerMap["image_cache"]]
