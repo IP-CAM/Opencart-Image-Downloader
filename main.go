@@ -23,6 +23,12 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
+var (
+	totalImages   = 0
+	successImages = 0
+	failImages    = 0
+)
+
 func main() {
 	myApp := app.New()
 	myWindow := myApp.NewWindow("Google Spreadsheet Image Downloader")
@@ -208,10 +214,14 @@ func processRecords(records [][]string, progressBar *widget.ProgressBar, statusL
 
 		var newMainImagePath string
 		if mainImageURL != "" {
+			totalImages++
 			statusLabel.SetText(fmt.Sprintf("Status: Downloading main_image (%d/%d)", rowIndex+1, totalRows))
 			newPath, err := downloadAndSaveImage(mainImageURL, brandSEOURL, seoURL, fmt.Sprintf("m%d", rowIndex))
 			if err != nil {
+				failImages++
 				fmt.Printf("Error downloading main_image for row %d: %v\n", rowIndex+2, err)
+			} else {
+				successImages++
 			}
 			newMainImagePath = newPath
 		}
@@ -277,8 +287,8 @@ func continueProcessing(records [][]string, statusLabel *widget.Label, progressB
 		return
 	}
 
-	statusLabel.SetText("Status: Completed")
-	showInfo(myWindow, "Images downloaded successfully")
+	statusLabel.SetText(fmt.Sprintf("Download completed, %d images of %d downloaded. %d Failed.", successImages, totalImages, failImages))
+	showInfo(myWindow, fmt.Sprintf("Images downloaded,\n %d images of %d downloaded. %d Failed.", successImages, totalImages, failImages))
 }
 
 // downloadAndSaveImage behaves more like a browser when downloading images
