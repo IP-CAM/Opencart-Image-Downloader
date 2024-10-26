@@ -170,11 +170,21 @@ func processRecords(records [][]string, progressBar *widget.ProgressBar, statusL
 		headerMap[h] = i
 	}
 
-	requiredColumns := []string{"main_image", "image_cache", "brand_seo_url", "seo_url"}
+	requiredColumns := []string{"main_image", "image_cache", "brand_seo_url"}
 	for _, col := range requiredColumns {
 		if _, ok := headerMap[col]; !ok {
 			return fmt.Errorf("Missing required column: %s", col)
 		}
+	}
+
+	// Check for either "seo_url" or "seo_url_uk"
+	seoURLColumn := ""
+	if _, ok := headerMap["seo_url"]; ok {
+		seoURLColumn = "seo_url"
+	} else if _, ok := headerMap["seo_url_uk"]; ok {
+		seoURLColumn = "seo_url_uk"
+	} else {
+		return fmt.Errorf("Missing required column: seo_url or seo_url_uk")
 	}
 
 	totalRows := len(records) - 1
@@ -194,7 +204,7 @@ func processRecords(records [][]string, progressBar *widget.ProgressBar, statusL
 		mainImageURL := row[headerMap["main_image"]]
 		imageCacheURLs := row[headerMap["image_cache"]]
 		brandSEOURL := row[headerMap["brand_seo_url"]]
-		seoURL := row[headerMap["seo_url"]]
+		seoURL := row[headerMap[seoURLColumn]]
 
 		var newMainImagePath string
 		if mainImageURL != "" {
