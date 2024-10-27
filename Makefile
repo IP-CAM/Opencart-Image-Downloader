@@ -1,7 +1,8 @@
 # Makefile for Go Application
 
 # Application name
-APP_NAME := OCImage2Downloader
+# Go application name from go.mod or fallback
+APP_NAME := $(shell grep -E '^module ' go.mod 2>/dev/null | awk '{print $$2}' || echo "somegoapp")
 
 # Output directory for binaries
 OUTPUT_DIR := bin
