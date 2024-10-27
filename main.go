@@ -27,6 +27,7 @@ var (
 	totalImages   = 0
 	successImages = 0
 	failImages    = 0
+	extCounts     = make(map[string]int)
 )
 
 func main() {
@@ -291,7 +292,14 @@ func continueProcessing(records [][]string, statusLabel *widget.Label, progressB
 		return
 	}
 
-	statusLabel.SetText(fmt.Sprintf("Download completed, %d images of %d downloaded. %d Failed.", successImages, totalImages, failImages))
+	finalMessage := fmt.Sprintf("Download completed, %d images of %d downloaded. %d Failed.\n", successImages, totalImages, failImages)
+	finalMessage += "Extension counts:\n"
+
+	for ext, count := range extCounts {
+		finalMessage += fmt.Sprintf("%s: %d Schtuck.\n", ext, count)
+	}
+
+	statusLabel.SetText(finalMessage)
 	showInfo(myWindow, fmt.Sprintf("Images downloaded,\n %d images of %d downloaded. %d Failed.", successImages, totalImages, failImages))
 }
 
@@ -308,6 +316,8 @@ func downloadAndSaveImage(imageURL, brandSEOURL, seoURL, imageType string) (stri
 	if ext == "" || len(ext) > 5 {
 		ext = ".jpg"
 	}
+
+	extCounts[ext]++
 
 	filename := fmt.Sprintf("%s_%s%s", seoURL, imageType, ext)
 	filePath := filepath.Join(brandDir, filename)
