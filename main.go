@@ -198,8 +198,9 @@ func processRecords(records [][]string, progressBar *widget.ProgressBar, statusL
 	progressBar.Max = float64(totalRows)
 	progressBar.SetValue(0)
 
-	var mainImageData []string
-	var imageCacheData []string
+	// Pre-allocate slices to keep order
+	mainImageData := make([]string, totalRows)
+	imageCacheData := make([]string, totalRows)
 
 	var mu sync.Mutex // To synchronize access to UI elements
 	for rowIndex, row := range records[1:] {
@@ -213,21 +214,26 @@ func processRecords(records [][]string, progressBar *widget.ProgressBar, statusL
 		brandSEOURL := row[headerMap["brand_seo_url"]]
 		seoURL := row[headerMap[seoURLColumn]]
 
-		var newMainImagePath string
-		if mainImageURL != "" {
+		// Default to old values
+		newMainImagePath := row[headerMap["main_image"]]
+		newImageCachePath := row[headerMap["image_cache"]]
+
+		// Process main_image if it's a valid URL
+		if isValidImageURL(mainImageURL) {
 			totalImages++
 			statusLabel.SetText(fmt.Sprintf("Status: Downloading main_image (row %d/from %d)", rowIndex+1, totalRows))
-			newPath, err := downloadAndSaveImage(mainImageURL, brandSEOURL, seoURL, fmt.Sprintf("m%d", rowIndex))
+			mpath, err := downloadAndSaveImage(mainImageURL, brandSEOURL, seoURL, fmt.Sprintf("m%d", rowIndex))
 			if err != nil {
+				// Download failed, keep old main_image content
 				failImages++
 				fmt.Printf("Error downloading main_image for row %d: %v\n", rowIndex+2, err)
 			} else {
 				successImages++
+				newMainImagePath = mpath
 			}
-			newMainImagePath = newPath
 		}
 
-		var newImageCachePaths []string
+		// Process image_cache if it's a valid URL
 		if imageCacheURLs != "" {
 			statusLabel.SetText(fmt.Sprintf("Status: Downloading image_cache (row %d/from %d)", rowIndex+1, totalRows))
 			var urls []string
@@ -239,37 +245,48 @@ func processRecords(records [][]string, progressBar *widget.ProgressBar, statusL
 				urls = []string{imageCacheURLs}
 			}
 
+			var downloadedPaths []string
+			downloadFailed := false
+
 			for i, imgURL := range urls {
 				imgURL = strings.TrimSpace(imgURL)
-				if imgURL != "" {
-					totalImages++
-					newPath, err := downloadAndSaveImage(imgURL, brandSEOURL, seoURL, fmt.Sprintf("i%d_j%d", rowIndex, i))
-					if err != nil {
-						failImages++
-						fmt.Printf("Error downloading image_cache for row %d: %v\n", rowIndex+2, err)
-					} else {
-						successImages++
-					}
-					newImageCachePaths = append(newImageCachePaths, newPath)
+				if imgURL == "" {
+					continue
 				}
+				if !isValidImageURL(imgURL) {
+					// Not a valid URL, do not download, keep original
+					downloadFailed = true
+					break
+				}
+
+				totalImages++
+				newPath, err := downloadAndSaveImage(imgURL, brandSEOURL, seoURL, fmt.Sprintf("i%d_j%d", rowIndex, i))
+				if err != nil {
+					// On any download failure, we revert to old content
+					failImages++
+					fmt.Printf("Error downloading image_cache for row %d: %v\n", rowIndex+2, err)
+					downloadFailed = true
+					break
+				} else {
+					successImages++
+					if newPath != "" {
+						downloadedPaths = append(downloadedPaths, newPath)
+					}
+				}
+			}
+
+			if !downloadFailed && len(downloadedPaths) > 0 {
+				newImageCachePath = strings.Join(downloadedPaths, "|")
+			} else if downloadFailed {
+				// Revert to old value on failure
+				newImageCachePath = row[headerMap["image_cache"]]
 			}
 		}
 
-		// Update the main_image and image_cache data
-		mu.Lock()
-		if newMainImagePath != "" {
-			mainImageData = append(mainImageData, newMainImagePath)
-		} else {
-			mainImageData = append(mainImageData, "")
-		}
-
-		if len(newImageCachePaths) > 0 {
-			imageCacheData = append(imageCacheData, strings.Join(newImageCachePaths, "|"))
-		} else {
-			imageCacheData = append(imageCacheData, "")
-		}
-
 		// Update progress bar and status label
+		mu.Lock()
+		mainImageData[rowIndex] = newMainImagePath
+		imageCacheData[rowIndex] = newImageCachePath
 		progressBar.SetValue(float64(rowIndex + 1))
 		mu.Unlock()
 	}
@@ -303,8 +320,19 @@ func continueProcessing(records [][]string, statusLabel *widget.Label, progressB
 	showInfo(myWindow, fmt.Sprintf("Images downloaded,\n %d images of %d downloaded. %d Failed.", successImages, totalImages, failImages))
 }
 
+// Check if URL starts with http, https or ftp
+func isValidImageURL(imageURL string) bool {
+	imageURL = strings.ToLower(imageURL)
+	return strings.HasPrefix(imageURL, "http://") || strings.HasPrefix(imageURL, "https://") || strings.HasPrefix(imageURL, "ftp://")
+}
+
 // downloadAndSaveImage behaves more like a browser when downloading images
 func downloadAndSaveImage(imageURL, brandSEOURL, seoURL, imageType string) (string, error) {
+	if imageURL == "" {
+		// No URL provided
+		return "", nil
+	}
+
 	baseDir := "products"
 	brandDir := filepath.Join(baseDir, brandSEOURL)
 	err := os.MkdirAll(brandDir, os.ModePerm)
