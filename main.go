@@ -246,27 +246,28 @@ func processRecords(records [][]string, progressBar *widget.ProgressBar, statusL
 			}
 
 			var downloadedPaths []string
-			downloadFailed := false
 
 			for i, imgURL := range urls {
 				imgURL = strings.TrimSpace(imgURL)
 				if imgURL == "" {
+					// Empty URL, skip
 					continue
 				}
 				if !isValidImageURL(imgURL) {
-					// Not a valid URL, do not download, keep original
-					downloadFailed = true
-					break
+					// Not a valid URL, skip this single image
+					fmt.Printf("Skipping non-URL image for row %d: %s\n", rowIndex+2, imgURL)
+					// Do not break out; just skip this image
+					failImages++
+					continue
 				}
 
 				totalImages++
 				newPath, err := downloadAndSaveImage(imgURL, brandSEOURL, seoURL, fmt.Sprintf("i%d_j%d", rowIndex, i))
 				if err != nil {
-					// On any download failure, we revert to old content
+					// On download failure, just skip this image
 					failImages++
 					fmt.Printf("Error downloading image_cache for row %d: %v\n", rowIndex+2, err)
-					downloadFailed = true
-					break
+					continue // move on to the next image without reverting
 				} else {
 					successImages++
 					if newPath != "" {
@@ -275,12 +276,9 @@ func processRecords(records [][]string, progressBar *widget.ProgressBar, statusL
 				}
 			}
 
-			if !downloadFailed && len(downloadedPaths) > 0 {
-				newImageCachePath = strings.Join(downloadedPaths, "|")
-			} else if downloadFailed {
-				// Revert to old value on failure
-				newImageCachePath = row[headerMap["image_cache"]]
-			}
+			// If some images were successfully downloaded, update the path.
+			// If none were downloaded successfully, this will be empty.
+			newImageCachePath = strings.Join(downloadedPaths, "|")
 		}
 
 		// Update progress bar and status label

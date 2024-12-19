@@ -1,0 +1,7 @@
+2024-12-18
+
+* Fix image_cache row if only one image unavaliable
+* Support either "seo_url" (OC2) or "seo_url_uk" (OC3)
+* Add more like a browser behaviour
+
+2024-09-24 v1.0.0 First release
