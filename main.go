@@ -320,10 +320,19 @@ func processRecords(records [][]string, progressBar *widget.ProgressBar, statusL
 	}
 
 	// Update the text boxes with new data
-	//    fyne.CurrentApp().RunOnMain(func() {
-	mainImageText.SetText(strings.Join(mainImageData, "\n"))
-	imageCacheText.SetText(strings.Join(imageCacheData, "\n"))
-	//    })
+	// Prevent GUI freezing for long textes
+	if len(mainImageData) > 500 {
+		mainImageText.SetText("Too many products. See result in main_image.txt")
+	} else {
+		mainImageText.SetText(strings.Join(mainImageData, "\n"))
+	}
+	if len(imageCacheData) > 500 {
+		imageCacheText.SetText("Too many products. See result in image_cache.txt")
+	} else {
+		imageCacheText.SetText(strings.Join(imageCacheData, "\n"))
+	}
+	writeDataToFile(mainImageData, "main_image.txt")
+	writeDataToFile(imageCacheData, "image_cache.txt")
 
 	return nil
 }
@@ -454,4 +463,21 @@ func dirExists(dir string) bool {
 		return false
 	}
 	return info.IsDir()
+}
+
+func writeDataToFile(data []string, filename string) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+	defer file.Close()
+
+	for _, line := range data {
+		_, err := file.WriteString(line + "\n")
+		if err != nil {
+			return fmt.Errorf("failed to write to file: %w", err)
+		}
+	}
+
+	return nil
 }
