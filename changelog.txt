@@ -1,6 +1,13 @@
-2024-12-18
-
+...DEV...
+* Reuse the same http.Client for each request
+* Fix error processing broken urls
+* Keep connection between images for same domain
 * Fix image_cache row if only one image unavaliable
+
+2024-10-27 v. 1.1.0
+* Final statistic
+* Better logging
+* Remove annoing desktop notifications
 * Support either "seo_url" (OC2) or "seo_url_uk" (OC3)
 * Add more like a browser behaviour
 

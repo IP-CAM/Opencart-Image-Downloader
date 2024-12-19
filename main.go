@@ -28,9 +28,34 @@ var (
 	successImages = 0
 	failImages    = 0
 	extCounts     = make(map[string]int)
+
+	globalClient *http.Client
 )
 
 func main() {
+	// Create a cookie jar for the global client
+	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
+	if err != nil {
+		panic(err)
+	}
+
+	// Create a transport that uses keep-alive connections
+	transport := &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+
+	// Create a global client that will be reused for all network operations
+	globalClient = &http.Client{
+		Transport: transport,
+		Jar:       jar,
+		Timeout:   30 * time.Second,
+	}
+
 	myApp := app.New()
 	myWindow := myApp.NewWindow("Google Spreadsheet Image Downloader")
 
@@ -147,7 +172,12 @@ func getCSVURL(spreadsheetURL string) (string, error) {
 }
 
 func fetchCSV(csvURL string) ([][]string, error) {
-	resp, err := http.Get(csvURL)
+	req, err := http.NewRequest("GET", csvURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := globalClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -354,14 +384,6 @@ func downloadAndSaveImage(imageURL, brandSEOURL, seoURL, imageType string) (stri
 		return relativePath, nil
 	}
 
-	// Create a new HTTP client that mimics a browser
-	jar, _ := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
-	client := &http.Client{
-		Jar:     jar,
-		Timeout: 30 * time.Second, // Set a timeout for the download
-		// Follow redirects by default
-	}
-
 	// Create an HTTP request with custom headers
 	req, err := http.NewRequest("GET", imageURL, nil)
 	if err != nil {
@@ -375,13 +397,14 @@ func downloadAndSaveImage(imageURL, brandSEOURL, seoURL, imageType string) (stri
 	req.Header.Set("Referer", "https://www.google.com/") // Simulating a referrer
 
 	// Perform the HTTP request
-	resp, err := client.Do(req)
+	resp, err := globalClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("Failed to execute HTTP request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		fmt.Printf("get: %s -> %s\n", imageURL, filePath)
 		return "", fmt.Errorf("Failed to download image: %s", resp.Status)
 	}
 
