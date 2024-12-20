@@ -1,6 +1,6 @@
-...DEV...
+2024-12-18 v. 1.1.1
 * Update and improve logging
-* Fix: Prevent GUI freezing for long textes
+* Fix: Prevent GUI freezing for long texts
 * Reuse the same http.Client for each request
 * Fix error processing broken urls
 * Keep connection between images for same domain
