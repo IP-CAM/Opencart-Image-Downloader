@@ -30,6 +30,9 @@ var (
 	extCounts     = make(map[string]int)
 
 	globalClient *http.Client
+
+	goodLog *os.File
+	badLog  *os.File
 )
 
 func main() {
@@ -55,6 +58,20 @@ func main() {
 		Jar:       jar,
 		Timeout:   30 * time.Second,
 	}
+
+	// Open log files
+	var logErr error
+	goodLog, logErr = os.Create("good.txt")
+	if logErr != nil {
+		panic("Failed to open good.txt: " + logErr.Error())
+	}
+	defer goodLog.Close()
+
+	badLog, logErr = os.Create("bad.txt")
+	if logErr != nil {
+		panic("Failed to open bad.txt: " + logErr.Error())
+	}
+	defer badLog.Close()
 
 	myApp := app.New()
 	myWindow := myApp.NewWindow("Google Spreadsheet Image Downloader")
@@ -256,10 +273,11 @@ func processRecords(records [][]string, progressBar *widget.ProgressBar, statusL
 			if err != nil {
 				// Download failed, keep old main_image content
 				failImages++
-				fmt.Printf("Error downloading main_image for row %d: %v\n", rowIndex+2, err)
+				logFailure(fmt.Sprintf("MAIN IMAGE FAIL (row %d): %s -> %v", rowIndex+1, mainImageURL, err))
 			} else {
 				successImages++
 				newMainImagePath = mpath
+				logSuccess(fmt.Sprintf("MAIN IMAGE OK (row %d): %s -> %s", rowIndex+1, mainImageURL, mpath))
 			}
 		}
 
@@ -285,9 +303,9 @@ func processRecords(records [][]string, progressBar *widget.ProgressBar, statusL
 				}
 				if !isValidImageURL(imgURL) {
 					// Not a valid URL, skip this single image
-					fmt.Printf("Skipping non-URL image for row %d: %s\n", rowIndex+2, imgURL)
 					// Do not break out; just skip this image
 					failImages++
+					logFailure(fmt.Sprintf("CACHE IMAGE FAIL (row %d): %s is not a valid URL", rowIndex+1, imgURL))
 					continue
 				}
 
@@ -296,10 +314,11 @@ func processRecords(records [][]string, progressBar *widget.ProgressBar, statusL
 				if err != nil {
 					// On download failure, just skip this image
 					failImages++
-					fmt.Printf("Error downloading image_cache for row %d: %v\n", rowIndex+2, err)
 					continue // move on to the next image without reverting
+					logFailure(fmt.Sprintf("CACHE IMAGE FAIL (row %d): %s -> %v", rowIndex+1, imgURL, err))
 				} else {
 					successImages++
+					logSuccess(fmt.Sprintf("CACHE IMAGE OK (row %d): %s -> %s", rowIndex+1, imgURL, newPath))
 					if newPath != "" {
 						downloadedPaths = append(downloadedPaths, newPath)
 					}
@@ -389,7 +408,8 @@ func downloadAndSaveImage(imageURL, brandSEOURL, seoURL, imageType string) (stri
 	relativePath := filepath.ToSlash(filePath) // For consistent path separators
 
 	if _, err := os.Stat(filePath); err == nil {
-		fmt.Printf("File already exists: %s\n", filePath)
+		// File already exists, this is considered a success (already downloaded)
+		logSuccess(fmt.Sprintf("ALREADY EXISTS: %s", filePath))
 		return relativePath, nil
 	}
 
@@ -413,7 +433,6 @@ func downloadAndSaveImage(imageURL, brandSEOURL, seoURL, imageType string) (stri
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("get: %s -> %s\n", imageURL, filePath)
 		return "", fmt.Errorf("Failed to download image: %s", resp.Status)
 	}
 
@@ -437,7 +456,6 @@ func downloadAndSaveImage(imageURL, brandSEOURL, seoURL, imageType string) (stri
 		}
 	}
 
-	fmt.Printf("Downloaded image: %s\n", filePath)
 	return relativePath, nil
 }
 
@@ -480,4 +498,18 @@ func writeDataToFile(data []string, filename string) error {
 	}
 
 	return nil
+}
+
+// logSuccess writes a success message to good.log
+func logSuccess(msg string) {
+	if goodLog != nil {
+		goodLog.WriteString(msg + "\n")
+	}
+}
+
+// logFailure writes a failure message to bad.log
+func logFailure(msg string) {
+	if badLog != nil {
+		badLog.WriteString(msg + "\n")
+	}
 }

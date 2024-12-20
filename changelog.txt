@@ -1,4 +1,5 @@
 ...DEV...
+* Update logging
 * Fix: Prevent GUI freezing for long textes
 * Reuse the same http.Client for each request
 * Fix error processing broken urls
