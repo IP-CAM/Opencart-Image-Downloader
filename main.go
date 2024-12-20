@@ -273,12 +273,14 @@ func processRecords(records [][]string, progressBar *widget.ProgressBar, statusL
 			if err != nil {
 				// Download failed, keep old main_image content
 				failImages++
-				logFailure(fmt.Sprintf("MAIN IMAGE FAIL (row %d): %s -> %v", rowIndex+1, mainImageURL, err))
+				logFailure(fmt.Sprintf("MAIN IMAGE FAIL (row %d): %s -> %s | %v", rowIndex+2, mainImageURL, mpath, err))
 			} else {
 				successImages++
 				newMainImagePath = mpath
-				logSuccess(fmt.Sprintf("MAIN IMAGE OK (row %d): %s -> %s", rowIndex+1, mainImageURL, mpath))
+				logSuccess(fmt.Sprintf("MAIN IMAGE OK (row %d): %s -> %s", rowIndex+2, mainImageURL, mpath))
 			}
+		} else {
+			logFailure(fmt.Sprintf("MAIN IMAGE FAIL (row %d): %s is not a valid URL", rowIndex+2, mainImageURL))
 		}
 
 		// Process image_cache if it's a valid URL
@@ -305,7 +307,7 @@ func processRecords(records [][]string, progressBar *widget.ProgressBar, statusL
 					// Not a valid URL, skip this single image
 					// Do not break out; just skip this image
 					failImages++
-					logFailure(fmt.Sprintf("CACHE IMAGE FAIL (row %d): %s is not a valid URL", rowIndex+1, imgURL))
+					logFailure(fmt.Sprintf("CACHE IMAGE FAIL (row %d): %s is not a valid URL", rowIndex+2, imgURL))
 					continue
 				}
 
@@ -314,11 +316,11 @@ func processRecords(records [][]string, progressBar *widget.ProgressBar, statusL
 				if err != nil {
 					// On download failure, just skip this image
 					failImages++
+					logFailure(fmt.Sprintf("CACHE IMAGE FAIL (row %d): %s -> %s | %v", rowIndex+2, imgURL, newPath, err))
 					continue // move on to the next image without reverting
-					logFailure(fmt.Sprintf("CACHE IMAGE FAIL (row %d): %s -> %v", rowIndex+1, imgURL, err))
 				} else {
 					successImages++
-					logSuccess(fmt.Sprintf("CACHE IMAGE OK (row %d): %s -> %s", rowIndex+1, imgURL, newPath))
+					logSuccess(fmt.Sprintf("CACHE IMAGE OK (row %d): %s -> %s", rowIndex+2, imgURL, newPath))
 					if newPath != "" {
 						downloadedPaths = append(downloadedPaths, newPath)
 					}
@@ -416,7 +418,7 @@ func downloadAndSaveImage(imageURL, brandSEOURL, seoURL, imageType string) (stri
 	// Create an HTTP request with custom headers
 	req, err := http.NewRequest("GET", imageURL, nil)
 	if err != nil {
-		return "", err
+		return relativePath, err
 	}
 
 	// Add browser-like headers to the request
@@ -428,31 +430,31 @@ func downloadAndSaveImage(imageURL, brandSEOURL, seoURL, imageType string) (stri
 	// Perform the HTTP request
 	resp, err := globalClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("Failed to execute HTTP request: %v", err)
+		return relativePath, fmt.Errorf("Failed to execute HTTP request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("Failed to download image: %s", resp.Status)
+		return relativePath, fmt.Errorf("Failed to download image: %s", resp.Status)
 	}
 
 	// Save the image to a file
 	out, err := os.Create(filePath)
 	if err != nil {
-		return "", fmt.Errorf("Failed to create file: %v", err)
+		return relativePath, fmt.Errorf("Failed to create file: %v", err)
 	}
 	defer out.Close()
 
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("Failed to save image to file: %v", err)
+		return relativePath, fmt.Errorf("Failed to save image to file: %v", err)
 	}
 
 	// Check if the content length matches the downloaded file size
 	if resp.ContentLength > 0 {
 		stat, err := out.Stat()
 		if err == nil && stat.Size() != resp.ContentLength {
-			return "", fmt.Errorf("File size mismatch: expected %d bytes, got %d bytes", resp.ContentLength, stat.Size())
+			return relativePath, fmt.Errorf("File size mismatch: expected %d bytes, got %d bytes", resp.ContentLength, stat.Size())
 		}
 	}
 
